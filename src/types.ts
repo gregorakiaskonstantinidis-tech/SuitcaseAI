@@ -41,6 +41,7 @@ export type PackingItem = {
   quantity: number
   packed: boolean
   wardrobeId?: string
+  recommendationReason?: string
 }
 
 export type Trip = {
@@ -65,9 +66,16 @@ export type Outfit = {
   name: string
   occasion: string
   items: Clothing[]
+  suggestions?: OutfitSuggestion[]
   hybrid: boolean
   note?: string
   reason?: string
+}
+
+export type OutfitSuggestion = {
+  name: string
+  category: string
+  reason: string
 }
 
 export type LearningProfile = {

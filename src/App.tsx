@@ -7,7 +7,7 @@ import {
   Sun, ThumbsDown, ThumbsUp, Thermometer, Upload, UserRound, X,
 } from 'lucide-react'
 import { activitiesList, activityIcon, defaultChecklist, initialLuggage, initialWardrobe } from './data'
-import { recommendOutfits, recommendPacking, usageEstimate } from './recommendations'
+import { recommendMissingItems, recommendOutfits, recommendPacking, usageEstimate } from './recommendations'
 import { initialLearningProfile, learnedProfileSummary, recordOutfitFeedback } from './learning'
 import { estimateTripWeather } from './weather'
 import type { Clothing, LearningProfile, Luggage, Outfit, PackingItem, Trip, WeatherEstimate } from './types'
@@ -38,6 +38,17 @@ function tripDays(departure: string, returnDate: string) {
   if (!departure || !returnDate) return 1
   const difference = Math.round((new Date(`${returnDate}T12:00:00`).getTime() - new Date(`${departure}T12:00:00`).getTime()) / 86400000)
   return Math.max(1, difference + 1)
+}
+
+function updateOutfitItems(outfit: Outfit, items: Clothing[], wardrobe: Clothing[], weather: string, minTemp?: number): Outfit {
+  const suggestions = recommendMissingItems(items, wardrobe, weather, minTemp)
+  const baseReason = outfit.reason?.replace(/ Recommended to take:.*$/, '') ?? ''
+  return {
+    ...outfit,
+    items,
+    suggestions,
+    reason: `${baseReason}${suggestions.length ? ` Recommended to take: ${suggestions.map((suggestion) => suggestion.name).join(', ')}.` : ''}`,
+  }
 }
 
 function App() {
@@ -341,8 +352,8 @@ function ProfilePage({ profile, onSave, learning, onLogout }: { profile: { name:
   </div>
 }
 
-const wizardTitles = ['Trip & dates', 'Suitcase', 'Activities', 'Packing', 'Outfits', 'Checklist']
-const initialForm = () => ({ destination: '', departure: '', returnDate: '', luggageId: '', activities: [] as string[], customActivity: '', weather: 'Mild & mixed', outfitCount: 4, reuse: true, hybrid: true, laundry: false })
+const wizardTitles = ['Trip & dates', 'Suitcase', 'Activities', 'Outfits & packing', 'Outfits', 'Checklist']
+const initialForm = () => ({ destination: '', departure: '', returnDate: '', luggageId: '', activities: [] as string[], weather: 'Mild & mixed', outfitCount: 4, reuse: true, hybrid: true, laundry: false })
 type TripFormState = ReturnType<typeof initialForm>
 
 function TripWizard({ wardrobe, luggage, trips, learning, onSave, notify }: { wardrobe: Clothing[]; luggage: Luggage[]; trips: Trip[]; learning: LearningProfile; onSave: (trip: Trip) => void; notify: (message: string) => void }) {
@@ -350,23 +361,24 @@ function TripWizard({ wardrobe, luggage, trips, learning, onSave, notify }: { wa
   const [searchParams] = useState(() => new URLSearchParams(window.location.search))
   const editingId = searchParams.get('edit')
   const existing = trips.find((trip) => trip.id === editingId)
+  const hasOutfitRecommendations = Boolean(existing?.outfits?.length && existing.outfits.every((outfit) => outfit.suggestions !== undefined))
   const [step, setStep] = useState(0)
   const [form, setForm] = useState<TripFormState>(() => existing ? {
     destination: existing.destination, departure: existing.departure, returnDate: existing.returnDate,
-    luggageId: existing.luggageId, activities: existing.activities, customActivity: '',
+    luggageId: existing.luggageId, activities: existing.activities,
     weather: existing.weather, outfitCount: existing.preferences.outfitCount, reuse: existing.preferences.reuse,
     hybrid: existing.preferences.hybrid, laundry: existing.preferences.laundry,
   } : initialForm())
   const [error, setError] = useState('')
   const [weatherEstimate, setWeatherEstimate] = useState<WeatherEstimate | null>(existing?.weatherEstimate ?? null)
   const [weatherStatus, setWeatherStatus] = useState<'idle' | 'loading' | 'ready'>('idle')
-  const [draftOutfits, setDraftOutfits] = useState<Outfit[] | null>(() => existing?.outfits ?? null)
-  const [draftPacking, setDraftPacking] = useState<PackingItem[] | null>(() => existing?.packing ?? null)
+  const [draftOutfits, setDraftOutfits] = useState<Outfit[] | null>(() => hasOutfitRecommendations ? existing?.outfits ?? null : null)
+  const [draftPacking, setDraftPacking] = useState<PackingItem[] | null>(() => hasOutfitRecommendations ? existing?.packing ?? null : null)
   const [draftChecklist, setDraftChecklist] = useState<PackingItem[] | null>(() => existing?.checklist ?? null)
   const [customChecklistItem, setCustomChecklistItem] = useState('')
   const days = tripDays(form.departure, form.returnDate)
   const selectedBag = luggage.find((bag) => bag.id === form.luggageId)
-  const activities = [...form.activities, ...(form.customActivity.trim() ? [form.customActivity.trim()] : [])]
+  const activities = form.activities
   const setField = <K extends keyof TripFormState>(key: K, value: TripFormState[K]) => {
     setForm((current) => ({ ...current, [key]: value }))
     setDraftOutfits(null)
@@ -392,10 +404,11 @@ function TripWizard({ wardrobe, luggage, trips, learning, onSave, notify }: { wa
     checklist: [],
     createdAt: existing?.createdAt ?? '',
   }
-  const generatedOutfits = useMemo(() => recommendOutfits(wardrobe, recommendationTrip, learning, selectedBag?.capacity), [wardrobe, form.destination, form.departure, form.returnDate, form.luggageId, form.activities, form.customActivity, form.weather, form.outfitCount, form.reuse, form.hybrid, form.laundry, learning, selectedBag?.capacity])
+  const generatedOutfits = useMemo(() => recommendOutfits(wardrobe, recommendationTrip, learning, selectedBag?.capacity), [wardrobe, form.destination, form.departure, form.returnDate, form.luggageId, form.activities, form.weather, form.outfitCount, form.reuse, form.hybrid, form.laundry, weatherEstimate, learning, selectedBag?.capacity])
   const outfits = draftOutfits ?? generatedOutfits
-  const suggestedPacking = useMemo(() => recommendPacking(wardrobe, generatedOutfits, days, form.laundry, form.weather), [wardrobe, generatedOutfits, days, form.laundry, form.weather])
+  const suggestedPacking = useMemo(() => recommendPacking(wardrobe, outfits, days, form.laundry, form.weather), [wardrobe, outfits, days, form.laundry, form.weather])
   const packing = draftPacking ?? suggestedPacking
+  const recommendedClothing = packing.filter((item) => item.recommendationReason)
   const checklist = draftChecklist ?? defaultChecklist(days).filter((item) => item.category !== 'Clothing basics')
   const usage = usageEstimate(packing, selectedBag?.capacity ?? 38)
 
@@ -474,29 +487,28 @@ function TripWizard({ wardrobe, luggage, trips, learning, onSave, notify }: { wa
   }
   const updateOutfit = (outfitIndex: number, itemIndex: number, replacement: Clothing) => {
     const updated = outfits.map((outfit, index) => index === outfitIndex
-      ? { ...outfit, items: outfit.items.map((item, currentIndex) => currentIndex === itemIndex ? replacement : item) }
+      ? updateOutfitItems(outfit, outfit.items.map((item, currentIndex) => currentIndex === itemIndex ? replacement : item), wardrobe, form.weather, weatherEstimate?.minTemp)
       : outfit)
     setDraftOutfits(updated)
-    const usedIds = new Set(updated.flatMap((outfit) => outfit.items.map((item) => item.id)))
     setDraftPacking((current) => {
       const base = current ?? packing
-      const retained = base.filter((item) => !item.wardrobeId || usedIds.has(item.wardrobeId))
-      const retainedIds = new Set(retained.map((item) => item.wardrobeId))
-      return [...retained, ...wardrobe.filter((item) => usedIds.has(item.id) && !retainedIds.has(item.id)).map((item) => ({
-        id: `wardrobe-${item.id}`, name: item.name, category: item.category, quantity: 1, packed: false, wardrobeId: item.id,
-      }))]
+      const previousPacking = new Map(base.map((item) => [item.id, item]))
+      return recommendPacking(wardrobe, updated, days, form.laundry, form.weather)
+        .map((item) => ({ ...item, packed: previousPacking.get(item.id)?.packed ?? false }))
     })
   }
   const addOutfitItem = (outfitIndex: number, itemId: string) => {
     const item = wardrobe.find((entry) => entry.id === itemId)
     if (!item || outfits[outfitIndex]?.items.some((entry) => entry.id === item.id)) return
-    const updated = outfits.map((outfit, index) => index === outfitIndex ? { ...outfit, items: [...outfit.items, item] } : outfit)
+    const updated = outfits.map((outfit, index) => index === outfitIndex
+      ? updateOutfitItems(outfit, [...outfit.items, item], wardrobe, form.weather, weatherEstimate?.minTemp)
+      : outfit)
     setDraftOutfits(updated)
     setDraftPacking((current) => {
       const base = current ?? packing
-      return base.some((entry) => entry.wardrobeId === item.id) ? base : [...base, {
-        id: `wardrobe-${item.id}`, name: item.name, category: item.category, quantity: 1, packed: false, wardrobeId: item.id,
-      }]
+      const previousPacking = new Map(base.map((entry) => [entry.id, entry]))
+      return recommendPacking(wardrobe, updated, days, form.laundry, form.weather)
+        .map((entry) => ({ ...entry, packed: previousPacking.get(entry.id)?.packed ?? false }))
     })
   }
   const addChecklistItem = (event: FormEvent) => {
@@ -513,10 +525,12 @@ function TripWizard({ wardrobe, luggage, trips, learning, onSave, notify }: { wa
     <div className="wizard-heading"><div><div className="eyebrow">{existing ? 'MAKE IT YOURS' : 'YOUR TRIP, STEP BY STEP'}</div><h1>{existing ? 'Edit your trip' : 'Let’s plan your trip.'}</h1><p>We’ll help with the weather, outfits, and essentials as you go.</p></div><span className="wizard-count">0{step + 1}<i>/</i>0{wizardTitles.length}</span></div>
     <div className="wizard-progress"><div className="wizard-steps">{wizardTitles.map((title, index) => <button key={title} className={`wizard-step ${step === index ? 'current' : ''} ${step > index ? 'complete' : ''}`} onClick={() => index < step && setStep(index)}><span>{step > index ? <Check size={14} /> : `0${index + 1}`}</span><small>{title}</small></button>)}</div><div className="wizard-progress-track"><span style={{ width: `${((step + 1) / wizardTitles.length) * 100}%` }} /></div></div>
     <section className="wizard-card">
-      {step === 0 && <div className="wizard-step-content"><StepIntro icon={<MapPin size={20} />} eyebrow="STEP 1 · TRIP & DATES" title="Where are we going?" description="Choose your destination and dates." /><div className="form-grid"><label className="field-full">Destination<input value={form.destination} onChange={(event) => setField('destination', event.target.value)} placeholder="e.g. Copenhagen, Denmark" autoFocus /><small><MapPin size={12} /> Weather updates automatically</small></label><label>Departure<input type="date" value={form.departure} onChange={(event) => setField('departure', event.target.value)} min={new Date().toISOString().slice(0, 10)} /></label><label>Return<input type="date" value={form.returnDate} onChange={(event) => setField('returnDate', event.target.value)} min={form.departure || new Date().toISOString().slice(0, 10)} /></label></div>{form.departure && form.returnDate && <div className="duration-pill"><CalendarDays size={15} /> <strong>{days} days</strong> away</div>}<div className="wizard-weather"><WeatherCard estimate={weatherEstimate} loading={weatherStatus === 'loading'} /></div></div>}
+      {step === 3 && <OutfitPlanningStep count={form.outfitCount} onChange={(count) => setField('outfitCount', count)} recommendations={recommendedClothing} />}
+      {step === 0 && <div className="wizard-step-content"><StepIntro icon={<MapPin size={20} />} eyebrow="STEP 1 · TRIP & DATES" title="Where are we going?" description="Choose your destination and dates." /><div className="form-grid"><label className="field-full">Destination<input value={form.destination} onChange={(event) => setField('destination', event.target.value)} placeholder="e.g. Copenhagen, Denmark" autoFocus /><small><MapPin size={12} /> Weather updates automatically</small></label><label>Departure<input type="date" lang="en-GB" value={form.departure} onChange={(event) => setField('departure', event.target.value)} min={new Date().toISOString().slice(0, 10)} /></label><label>Return<input type="date" lang="en-GB" value={form.returnDate} onChange={(event) => setField('returnDate', event.target.value)} min={form.departure || new Date().toISOString().slice(0, 10)} /></label></div>{form.departure && form.returnDate && <div className="duration-pill"><CalendarDays size={15} /> <strong>{days} days</strong> away</div>}<div className="wizard-weather"><WeatherCard estimate={weatherEstimate} loading={weatherStatus === 'loading'} /></div></div>}
       {step === 1 && <div className="wizard-step-content"><StepIntro icon={<LuggageIcon size={20} />} eyebrow="STEP 2 · SUITCASE" title="Choose your suitcase." description="Pick the bag you’ll take." />{luggage.length ? <div className="luggage-select-grid">{luggage.map((bag) => <button key={bag.id} className={`luggage-select-card ${form.luggageId === bag.id ? 'chosen' : ''}`} onClick={() => setField('luggageId', bag.id)}><span className="selection-check">{form.luggageId === bag.id && <Check size={13} />}</span><img src={bag.image || imageFallback} alt="" /><div><span className="eyebrow">{bag.type}</span><strong>{bag.name}</strong><small>{bag.capacity}L · {bag.dimensions}</small></div><ArrowUpRight size={16} /></button>)}</div> : <EmptyState title="No bags yet" description="Add a suitcase to continue." action={<button className="button button-primary" onClick={() => navigate('/luggage')}>Add a bag <ArrowRight size={15} /></button>} />}</div>}
-      {step === 2 && <div className="wizard-step-content"><StepIntro icon={<Sun size={20} />} eyebrow="STEP 3 · ACTIVITIES" title="What are you doing?" description="Choose all that apply." /><div className="activity-grid">{activitiesList.map((activity) => <button key={activity} className={`activity-option ${form.activities.includes(activity) ? 'selected' : ''}`} onClick={() => toggleActivity(activity)}><span>{activityIcon[activity]}</span><strong>{activity}</strong>{form.activities.includes(activity) && <Check size={14} />}</button>)}</div><div className="custom-activity"><label className="custom-activity-name">Something else<input placeholder="Add an activity" value={form.customActivity} onChange={(event) => setField('customActivity', event.target.value)} /></label></div></div>}
+      {step === 2 && <div className="wizard-step-content"><StepIntro icon={<Sun size={20} />} eyebrow="STEP 3 · ACTIVITIES" title="What are you doing?" description="Choose all that apply." /><div className="activity-grid">{activitiesList.map((activity) => <button key={activity} className={`activity-option ${form.activities.includes(activity) ? 'selected' : ''}`} onClick={() => toggleActivity(activity)}><span>{activityIcon[activity]}</span><strong>{activity}</strong>{form.activities.includes(activity) && <Check size={14} />}</button>)}</div></div>}
       {step === 3 && <div className="wizard-step-content"><StepIntro icon={<Sparkles size={20} />} eyebrow="STEP 4 · PACKING LIST" title="What would you like to pack?" description="We’ve picked clothes for your trip. Add or remove any item." /><div className="wizard-packing-summary"><div className="wizard-packing-summary-top"><span><LuggageIcon size={17} /> Bag space</span><strong>{usage}% <small>of {selectedBag?.capacity ?? 38}L</small></strong></div><div className="wizard-capacity-track"><span style={{ width: `${usage}%` }} /></div><small>Space is an estimate.</small></div><div className="wizard-packing-section"><h3>Your clothes <span>{packing.filter((item) => item.wardrobeId).length} items</span></h3><div className="wizard-packing-list">{wardrobe.map((item) => { const selected = packing.some((entry) => entry.wardrobeId === item.id); return <label className={`wizard-packing-row ${selected ? 'included' : ''}`} key={item.id}><input type="checkbox" checked={selected} onChange={() => toggleWardrobePacking(item)} /><img src={item.image || imageFallback} alt="" /><span><strong>{item.name}</strong><small>{item.category}{selected && outfits.some((outfit) => outfit.items.some((piece) => piece.id === item.id)) ? ' · outfit pick' : ''}</small></span><Check size={16} /></label> })}</div></div><div className="wizard-packing-section"><h3>Everyday essentials <span>Change quantity</span></h3><div className="wizard-essentials">{packing.filter((item) => item.category === 'Clothing basics').map((item) => <div className="wizard-essential-row" key={item.id}><span><strong>{item.name}</strong><small>{form.laundry ? 'Laundry planned' : `${days} days`}</small></span><div className="number-stepper"><button aria-label={`Fewer ${item.name}`} onClick={() => updatePackingItem(item.id, (current) => ({ ...current, quantity: Math.max(0, current.quantity - 1) }))}><ArrowDown size={13} /></button><strong>{item.quantity}</strong><button aria-label={`More ${item.name}`} onClick={() => updatePackingItem(item.id, (current) => ({ ...current, quantity: current.quantity + 1 }))}><ArrowUp size={13} /></button></div></div>)}</div></div><div className="preference-toggles wizard-compact-toggles"><ToggleRow title="Rewear clothes" subtitle="Mix and match to pack less." checked={form.reuse} onChange={(checked) => setField('reuse', checked)} /><ToggleRow title="Do laundry on the trip" subtitle="Pack fewer basics." checked={form.laundry} onChange={(checked) => setField('laundry', checked)} /></div></div>}
+      {step === 4 && <RecommendedClothingPanel recommendations={recommendedClothing} />}
       {step === 4 && <div className="wizard-step-content"><StepIntro icon={<Shirt size={20} />} eyebrow="STEP 5 · OUTFITS" title="Your outfit ideas." description="Swap pieces or add clothes from your closet." /><div className="preference-block wizard-outfit-count"><div className="preference-label"><strong>Outfit ideas</strong></div><div className="number-stepper"><button aria-label="Fewer outfits" onClick={() => setField('outfitCount', Math.max(1, form.outfitCount - 1))}><ArrowDown size={15} /></button><strong>{form.outfitCount}</strong><button aria-label="More outfits" onClick={() => setField('outfitCount', Math.min(8, form.outfitCount + 1))}><ArrowUp size={15} /></button><span>looks</span></div></div><div className="wizard-outfit-list">{outfits.length ? outfits.map((outfit, outfitIndex) => <article className="wizard-outfit-card" key={outfit.id}><div className="wizard-outfit-heading"><span className="wizard-outfit-badge">LOOK {String(outfitIndex + 1).padStart(2, '0')}</span><strong>{outfit.name}</strong>{outfit.hybrid && <span className="hybrid-badge"><Sparkles size={11} /> HYBRID</span>}</div><p>{outfit.occasion} · {form.weather}</p><div className="wizard-outfit-items">{outfit.items.map((item, itemIndex) => <label className="wizard-outfit-item" key={`${outfit.id}-${item.id}-${itemIndex}`}><img src={item.image || imageFallback} alt="" /><span><strong>{item.name}</strong><small>{item.category}</small></span><select aria-label={`Swap ${item.name}`} value={item.id} onChange={(event) => { const replacement = wardrobe.find((candidate) => candidate.id === event.target.value); if (replacement) updateOutfit(outfitIndex, itemIndex, replacement) }}>{wardrobe.filter((candidate) => candidate.category === item.category).map((candidate) => <option key={candidate.id} value={candidate.id}>{candidate.name}</option>)}</select></label>)}</div><label className="wizard-add-outfit-item"><Plus size={15} /><span>Add a piece</span><select value="" onChange={(event) => addOutfitItem(outfitIndex, event.target.value)}><option value="">Choose clothes…</option>{wardrobe.filter((candidate) => !outfit.items.some((item) => item.id === candidate.id)).map((candidate) => <option key={candidate.id} value={candidate.id}>{candidate.name}</option>)}</select></label>{outfit.note && <div className="hybrid-note"><Sparkles size={12} />{outfit.note}</div>}</article>) : <EmptyState title="Add clothes to your closet" description="Then we can suggest outfits for your trip." action={<button className="button button-outline" onClick={() => navigate('/wardrobe')}>Open closet <ArrowRight size={15} /></button>} />}</div></div>}
       {step === 5 && <div className="wizard-step-content"><StepIntro icon={<CheckCircle2 size={20} />} eyebrow="STEP 6 · CHECKLIST" title="Ready for your trip?" description="Check off the essentials. Add anything we missed." /><div className="review-card wizard-final-summary"><div className="review-destination"><span className="review-map"><MapPin size={20} /></span><div><small>YOUR DESTINATION</small><strong>{form.destination || 'Your next trip'}</strong><span>{dateLabel(form.departure, { month: 'long', day: 'numeric', year: 'numeric' })} – {dateLabel(form.returnDate, { month: 'long', day: 'numeric', year: 'numeric' })} <i /> {days} days</span></div><button onClick={() => setStep(0)}>Edit</button></div><div className="review-divider" /><div className="review-facts"><div><span className="review-icon"><LuggageIcon size={15} /></span><small>YOUR BAG</small><strong>{selectedBag?.name ?? 'Choose a bag'}</strong><span>{selectedBag?.type ?? 'Not selected'}</span></div><div><span className="review-icon"><Sun size={15} /></span><small>YOUR PLANS</small><strong>{activities.length} {activities.length === 1 ? 'activity' : 'activities'}</strong><span>{activities.slice(0, 2).join(', ')}{activities.length > 2 ? ` +${activities.length - 2}` : ''}</span></div><div><span className="review-icon"><Sparkles size={15} /></span><small>PACKING PLAN</small><strong>{outfits.length} outfit ideas</strong><span>{packing.length} items · {usage}% bag use</span></div></div></div><div className="wizard-checklist">{checklist.map((item) => <label className={`wizard-check-row ${item.packed ? 'checked' : ''}`} key={item.id}><input type="checkbox" checked={item.packed} onChange={() => setDraftChecklist((current) => (current ?? checklist).map((entry) => entry.id === item.id ? { ...entry, packed: !entry.packed } : entry))} /><span className="wizard-check-icon"><Check size={14} /></span><span><strong>{item.name}</strong><small>{item.category}</small></span></label>)}</div><form className="wizard-add-checklist" onSubmit={addChecklistItem}><Plus size={16} /><input value={customChecklistItem} onChange={(event) => setCustomChecklistItem(event.target.value)} placeholder="Add a reminder" /><button type="submit" disabled={!customChecklistItem.trim()}>Add</button></form>{weatherEstimate && <WeatherSummary estimate={weatherEstimate} category={form.weather} compact />}<div className="demo-notice"><Sparkles size={15} /><span>Demo packing suggestions, matched to your trip.</span></div></div>}
       {error && <div className="form-error"><CircleHelp size={15} />{error}</div>}
@@ -528,6 +542,19 @@ function TripWizard({ wardrobe, luggage, trips, learning, onSave, notify }: { wa
 
 function StepIntro({ icon, eyebrow, title, description }: { icon: ReactNode; eyebrow: string; title: string; description: string }) {
   return <div className="step-intro"><span className="step-icon">{icon}</span><div><div className="eyebrow">{eyebrow}</div><h2>{title}</h2><p>{description}</p></div></div>
+}
+
+function OutfitPlanningStep({ count, onChange, recommendations }: { count: number; onChange: (count: number) => void; recommendations: PackingItem[] }) {
+  return <section className="outfit-planning-step">
+    <div className="outfit-planning-heading"><div className="eyebrow">PLAN YOUR OUTFITS</div><h2>How many outfits would you like?</h2><p>We’ll choose pieces from your closet, build the looks, and flag anything missing for the trip’s weather.</p></div>
+    <div className="outfit-count-picker"><button aria-label="Fewer outfits" disabled={count <= 1} onClick={() => onChange(Math.max(1, count - 1))}><ArrowDown size={16} /></button><strong>{count}</strong><span>{count === 1 ? 'outfit' : 'outfits'}</span><button aria-label="More outfits" disabled={count >= 8} onClick={() => onChange(Math.min(8, count + 1))}><ArrowUp size={16} /></button></div>
+    <RecommendedClothingPanel recommendations={recommendations} />
+  </section>
+}
+
+function RecommendedClothingPanel({ recommendations }: { recommendations: PackingItem[] }) {
+  if (!recommendations.length) return null
+  return <div className="recommended-clothing-panel"><strong><Sparkles size={15} /> Recommended clothing</strong><p>Your wardrobe is missing some pieces for complete, weather-appropriate looks. We recommend taking:</p><ul>{recommendations.map((item) => <li key={item.id}><b>{item.name}</b><span>{item.recommendationReason}</span></li>)}</ul></div>
 }
 
 function WeatherSummary({ estimate, category, compact = false }: { estimate: WeatherEstimate; category: string; compact?: boolean }) {
@@ -563,7 +590,9 @@ function TripPlan({ trips, wardrobe, luggage, learning, onLearn, onUpdate, onNav
   const [ratedOutfits, setRatedOutfits] = useState<Record<string, boolean>>({})
   if (!trip) return <div className="page"><EmptyState title="We can’t find that trip" description="It may have been removed from your saved trips." action={<button className="button button-primary" onClick={() => onNavigate('/saved')}>Go to saved trips <ArrowRight size={15} /></button>} /></div>
   const bag = luggage.find((item) => item.id === trip.luggageId)
-  const outfits = trip.outfits?.length ? trip.outfits : recommendOutfits(wardrobe, trip, learning, bag?.capacity)
+  const outfits = trip.outfits?.length && trip.outfits.every((outfit) => outfit.suggestions !== undefined)
+    ? trip.outfits
+    : recommendOutfits(wardrobe, trip, learning, bag?.capacity)
   const usage = usageEstimate(trip.packing, bag?.capacity ?? 38)
   const totalItems = trip.packing.reduce((total, item) => total + item.quantity, 0)
   const packedCount = trip.packing.filter((item) => item.packed).length + trip.checklist.filter((item) => item.packed).length
@@ -625,7 +654,7 @@ function TripPlan({ trips, wardrobe, luggage, learning, onLearn, onUpdate, onNav
 }
 
 function PackingRow({ item, onToggle, onQuantity, onRemove, compact = false }: { item: PackingItem; onToggle: () => void; onQuantity?: (amount: number) => void; onRemove?: () => void; compact?: boolean }) {
-  return <div className={`packing-row ${item.packed ? 'is-packed' : ''} ${compact ? 'compact' : ''}`}><button className={`check-box ${item.packed ? 'checked' : ''}`} onClick={onToggle} aria-label={item.packed ? `Uncheck ${item.name}` : `Check ${item.name}`}>{item.packed && <Check size={12} />}</button><span className="packing-name">{item.name}</span>{onQuantity && <div className="quantity-control"><button aria-label={`Remove one ${item.name}`} onClick={() => onQuantity(-1)} disabled={item.quantity <= 1}>−</button><strong>{item.quantity}</strong><button aria-label={`Add one ${item.name}`} onClick={() => onQuantity(1)}>+</button></div>}{onRemove && <button className="remove-packing" aria-label={`Remove ${item.name}`} onClick={onRemove}><X size={14} /></button>}</div>
+  return <div className={`packing-row ${item.packed ? 'is-packed' : ''} ${compact ? 'compact' : ''}`}><button className={`check-box ${item.packed ? 'checked' : ''}`} onClick={onToggle} aria-label={item.packed ? `Uncheck ${item.name}` : `Check ${item.name}`}>{item.packed && <Check size={12} />}</button><span className="packing-name">{item.name}{item.recommendationReason && <small>Recommended for this trip: {item.recommendationReason}.</small>}</span>{onQuantity && <div className="quantity-control"><button aria-label={`Remove one ${item.name}`} onClick={() => onQuantity(-1)} disabled={item.quantity <= 1}>−</button><strong>{item.quantity}</strong><button aria-label={`Add one ${item.name}`} onClick={() => onQuantity(1)}>+</button></div>}{onRemove && <button className="remove-packing" aria-label={`Remove ${item.name}`} onClick={onRemove}><X size={14} /></button>}</div>
 }
 
 function PageTitle({ eyebrow, title, subtitle, action }: { eyebrow: string; title: string; subtitle: string; action?: ReactNode }) {

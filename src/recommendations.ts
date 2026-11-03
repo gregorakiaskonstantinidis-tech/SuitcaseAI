@@ -1,4 +1,4 @@
-import type { Clothing, LearningProfile, Outfit, PackingItem, Trip } from './types'
+import type { Clothing, LearningProfile, Outfit, OutfitSuggestion, PackingItem, Trip } from './types'
 import { defaultChecklist } from './data'
 import { learnedItemScore, initialLearningProfile } from './learning'
 
@@ -74,7 +74,7 @@ function estimatedLitres(item: Clothing) {
 
 export function recommendOutfits(
   wardrobe: Clothing[],
-  trip: Pick<Trip, 'activities' | 'preferences' | 'weather'>,
+  trip: Pick<Trip, 'activities' | 'preferences' | 'weather' | 'weatherEstimate'>,
   learning: LearningProfile = initialLearningProfile,
   bagCapacity = 38,
 ): Outfit[] {
@@ -85,11 +85,15 @@ export function recommendOutfits(
   const dresses = wardrobe.filter((item) => item.category === 'Dresses')
   const shoes = wardrobe.filter((item) => item.category === 'Shoes')
   const candidates: Array<{ items: Clothing[]; activity: string; score: number; hybridActivity?: string }> = []
-  const combinations: Clothing[][] = [
-    ...tops.flatMap((top) => bottoms.flatMap((bottom) => shoes.map((shoe) => [top, bottom, shoe]))),
-    ...dresses.flatMap((dress) => shoes.map((shoe) => [dress, shoe])),
-    ...tops.flatMap((top) => shoes.map((shoe) => [top, shoe])),
-  ]
+  const combinations: Clothing[][] = tops.length && bottoms.length
+    ? tops.flatMap((top) => bottoms.flatMap((bottom) => shoes.length
+      ? shoes.map((shoe) => [top, bottom, shoe])
+      : [[top, bottom]]))
+    : dresses.length
+      ? dresses.flatMap((dress) => shoes.length ? shoes.map((shoe) => [dress, shoe]) : [[dress]])
+      : tops.length
+        ? tops.flatMap((top) => shoes.length ? shoes.map((shoe) => [top, shoe]) : [[top]])
+        : bottoms.flatMap((bottom) => shoes.length ? shoes.map((shoe) => [bottom, shoe]) : [[bottom]])
 
   for (const items of combinations) {
     if (new Set(items.map((item) => item.id)).size !== items.length) continue
@@ -105,8 +109,9 @@ export function recommendOutfits(
   const packedItems = new Set<string>()
   const clothingSpaceBudget = Math.max(4, bagCapacity * 0.68)
   let estimatedClothingSpace = 0
+  const rankedCandidates = [...candidates].sort((a, b) => b.score - a.score)
   while (selected.length < count) {
-    const available = candidates.filter(({ items }) => {
+    const available = rankedCandidates.filter(({ items }) => {
       const comboKey = items.map((item) => item.id).sort().join('|')
       if (used.has(comboKey)) return false
       const addedSpace = items.filter((item) => !packedItems.has(item.id)).reduce((space, item) => space + estimatedLitres(item), 0)
@@ -117,16 +122,10 @@ export function recommendOutfits(
       const adjusted = (outfit: typeof a) => outfit.score - outfit.items.reduce((score, item) =>
         score + (selected.some((previous) => previous.items.some((previousItem) => previousItem.id === item.id)) ? reusePenalty : 0), 0)
       return adjusted(b) - adjusted(a)
-    })[0]
-    if (!candidate) {
-      if (selected.length > 0) break
-      const first = candidates[0]
-      if (!first) break
-      selected.push(first)
-      first.items.forEach((item) => packedItems.add(item.id))
-      estimatedClothingSpace += first.items.reduce((space, item) => space + estimatedLitres(item), 0)
-      used.add(first.items.map((item) => item.id).sort().join('|'))
-      continue
+    })[0] ?? rankedCandidates[selected.length % Math.max(1, rankedCandidates.length)] ?? {
+      items: [],
+      activity: activities[selected.length % activities.length],
+      score: 0,
     }
     used.add(candidate.items.map((item) => item.id).sort().join('|'))
     selected.push(candidate)
@@ -137,7 +136,21 @@ export function recommendOutfits(
     })
   }
 
-  return selected.map(({ items, activity, hybridActivity }, index) => {
+  const coldTrip = (trip.weatherEstimate?.minTemp ?? Number.POSITIVE_INFINITY) <= 8
+  const jackets = wardrobe.filter((item) => item.category === 'Jackets')
+  const weatherLayer = trip.weather === 'Rainy'
+    ? jackets.find((item) => /waterproof|rain|trench/i.test(item.name))
+    : coldTrip
+      ? jackets.find((item) => /puffer|wool|heavy|winter|insulated|coat/i.test(item.name))
+      : trip.weather === 'Cool & crisp'
+        ? [...jackets].sort((a, b) => weatherScore(b, trip.weather) - weatherScore(a, trip.weather))[0]
+        : undefined
+
+  return selected.map(({ items: baseItems, activity, hybridActivity }, index) => {
+    const items = weatherLayer && !baseItems.some((item) => item.id === weatherLayer.id)
+      ? [...baseItems, weatherLayer]
+      : baseItems
+    const suggestions = recommendMissingItems(items, wardrobe, trip.weather, trip.weatherEstimate?.minTemp)
     const dress = items.find((item) => item.category === 'Dresses')
     const top = items.find((item) => topCategories.has(item.category))
     const bottom = items.find((item) => bottomCategories.has(item.category))
@@ -147,32 +160,84 @@ export function recommendOutfits(
       name: dress?.name ?? `${top?.color ?? 'Easy'} + ${bottom?.color ?? 'everyday'}`,
       occasion: activity,
       items,
+      suggestions,
       hybrid: isHybrid,
       note: isHybrid ? `A versatile match for ${activity.toLowerCase()} and ${hybridActivity?.toLowerCase()}.` : undefined,
-      reason: `Matched to ${activity.toLowerCase()}, ${trip.weather.toLowerCase()} weather, and ${learning.feedbackCount ? 'your past outfit ratings' : 'versatile pieces in your wardrobe'}.`,
+      reason: `Matched to ${activity.toLowerCase()}, ${trip.weather.toLowerCase()} weather, and ${learning.feedbackCount ? 'your past outfit ratings' : 'versatile pieces in your wardrobe'}.${suggestions.length ? ` Recommended to take: ${suggestions.map((suggestion) => suggestion.name).join(', ')}.` : ''}`,
     }
   })
 }
 
-export function recommendPacking(wardrobe: Clothing[], outfits: Outfit[], days: number, laundry: boolean, weather = 'Mild & mixed'): PackingItem[] {
+export function recommendMissingItems(items: Clothing[], wardrobe: Clothing[], weather: string, minTemp?: number): OutfitSuggestion[] {
+  const suggestions: OutfitSuggestion[] = []
+  const hasDress = wardrobe.some((item) => item.category === 'Dresses')
+  const hasTop = wardrobe.some((item) => topCategories.has(item.category))
+  const hasBottom = wardrobe.some((item) => bottomCategories.has(item.category))
+  const hasShoes = wardrobe.some((item) => item.category === 'Shoes')
+
+  if (!hasTop && !hasDress) {
+    suggestions.push({
+      name: weather === 'Warm & sunny' ? 'Lightweight breathable top' : 'Versatile top',
+      category: 'Tops',
+      reason: 'complete the outfit with a comfortable top',
+    })
+  }
+  if (!hasBottom && !hasDress) {
+    suggestions.push({
+      name: weather === 'Warm & sunny' ? 'Lightweight bottoms' : 'Comfortable trousers',
+      category: 'Bottoms',
+      reason: 'complete the outfit with a suitable bottom layer',
+    })
+  }
+  if (!hasShoes) {
+    suggestions.push({
+      name: 'Comfortable walking shoes',
+      category: 'Shoes',
+      reason: 'make the look practical for getting around',
+    })
+  }
+
+  if (weather === 'Rainy' && !items.some((item) => item.category === 'Jackets' && /waterproof|rain|trench/i.test(item.name))) {
+    suggestions.push({ name: 'Waterproof jacket', category: 'Outerwear', reason: 'help keep you dry in rainy weather' })
+  }
+  if (minTemp !== undefined && minTemp <= 8 && !items.some((item) => item.category === 'Jackets' && /puffer|wool|heavy|winter|insulated|coat/i.test(item.name))) {
+    suggestions.push({ name: 'Puffer jacket', category: 'Outerwear', reason: 'provide warmth in the colder forecast' })
+  } else if (weather === 'Cool & crisp' && !items.some((item) => item.category === 'Jackets')) {
+    suggestions.push({ name: 'Warm jacket', category: 'Outerwear', reason: 'add a warm layer for cool weather' })
+  }
+
+  return suggestions
+}
+
+export function recommendPacking(wardrobe: Clothing[], outfits: Outfit[], days: number, laundry: boolean, _weather = 'Mild & mixed'): PackingItem[] {
   const recommendedIds = new Set(outfits.flatMap((outfit) => outfit.items.map((item) => item.id)))
-  const layers = weather === 'Cool & crisp' || weather === 'Rainy'
-    ? wardrobe.filter((item) => item.category === 'Jackets' && weatherScore(item, weather) >= 2).slice(0, 1)
-    : []
-  const clothing: PackingItem[] = [...recommendedIds, ...layers.map((item) => item.id)].flatMap((id) => {
+  const clothing: PackingItem[] = [...recommendedIds].flatMap((id) => {
     const item = wardrobe.find((entry) => entry.id === id)
     if (!item) return []
     return [{ id: `wardrobe-${item.id}`, name: item.name, category: item.category, quantity: 1, packed: false, wardrobeId: item.id }]
   })
+  const suggestions = new Map<string, OutfitSuggestion>()
+  outfits.forEach((outfit) => outfit.suggestions?.forEach((suggestion) => {
+    suggestions.set(suggestion.name, suggestion)
+  }))
+  const recommendedClothing: PackingItem[] = [...suggestions.values()].map((suggestion) => ({
+    id: `recommended-${suggestion.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
+    name: suggestion.name,
+    category: 'Recommended for this trip',
+    quantity: 1,
+    packed: false,
+    recommendationReason: suggestion.reason,
+  }))
   const basics = defaultChecklist(days).filter((item) => item.category === 'Clothing basics')
   const multiplier = laundry ? 0.6 : 1
   return [
     ...clothing,
+    ...recommendedClothing,
     ...basics.map((item) => ({ ...item, quantity: Math.max(1, Math.ceil(item.quantity * multiplier)) })),
   ]
 }
 
 export function usageEstimate(packing: PackingItem[], capacity: number) {
-  const clothingCount = packing.filter((item) => item.wardrobeId).length
+  const clothingCount = packing.filter((item) => item.wardrobeId || item.recommendationReason).length
   return Math.min(96, Math.round((clothingCount * 3.8 + packing.length * 0.7) / Math.max(capacity / 38, 0.5)))
 }

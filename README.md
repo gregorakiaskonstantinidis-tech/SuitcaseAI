@@ -14,7 +14,7 @@ Open the local URL printed by Vite. Choose **Explore the demo** to enter without
 ## Try the prototype
 
 1. Use **Closet & bags** to add or edit wardrobe pieces and luggage.
-2. Select **Trip** and follow the six steps: destination and dates (with an automatic weather estimate), suitcase, activities, clothing and adjustable essentials, editable outfit combinations, and a final checklist.
+2. Select **Trip** and follow the six steps: destination and dates (with an automatic weather estimate), suitcase, activities, outfit count and packing, editable outfit combinations, and a final checklist. SuitcaseAI builds the requested number of looks from your wardrobe and flags missing weather-appropriate items as packing recommendations.
 3. Swap or add wardrobe pieces to outfit ideas, check or uncheck recommended clothes, adjust essentials, and add custom checklist reminders before saving.
 4. Open **Saved trips** to revisit the plan, continue checking items, edit it, or delete it.
 

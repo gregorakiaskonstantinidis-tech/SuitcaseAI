@@ -244,9 +244,9 @@ a{color:inherit}
 .settings-card{padding:20px 23px}
 .card-heading{display:flex;justify-content:space-between;align-items:center;color:#80918e;margin-bottom:17px}
 .card-heading h2{font:600 17px Manrope,sans-serif;margin:5px 0 0;color:var(--navy)}
-.settings-card label,.modal-form>label,.modal-form-row label,.auth-form label,.form-grid label,.custom-activity label{display:grid;gap:7px;font-size:10px;color:#586771;font-weight:600}
-.settings-card input,.settings-card select,.modal-form input,.modal-form select,.auth-form input,.form-grid input,.custom-activity input,.custom-activity select{width:100%;height:39px;border:1px solid #e4e3dd;border-radius:6px;background:#fffefa;padding:0 11px;color:#3c4a52;font-size:11px;outline:none}
-.settings-card input:focus,.settings-card select:focus,.modal-form input:focus,.modal-form select:focus,.auth-form input:focus,.form-grid input:focus,.custom-activity input:focus{border-color:#9bb2bb}
+.settings-card label,.modal-form>label,.modal-form-row label,.auth-form label,.form-grid label{display:grid;gap:7px;font-size:10px;color:#586771;font-weight:600}
+.settings-card input,.settings-card select,.modal-form input,.modal-form select,.auth-form input,.form-grid input{width:100%;height:39px;border:1px solid #e4e3dd;border-radius:6px;background:#fffefa;padding:0 11px;color:#3c4a52;font-size:11px;outline:none}
+.settings-card input:focus,.settings-card select:focus,.modal-form input:focus,.modal-form select:focus,.auth-form input:focus,.form-grid input:focus{border-color:#9bb2bb}
 .settings-card>label{margin-bottom:13px}
 .settings-buttons{display:flex;gap:9px;margin-top:5px}
 .settings-buttons .button{font-size:11px}
@@ -306,8 +306,6 @@ a{color:inherit}
 .activity-option>span{font-size:16px}
 .activity-option strong{font-size:9px;font-weight:500}
 .activity-option>svg{position:absolute;right:7px;top:7px;color:#6f907e}
-.custom-activity{margin:15px 0 0 52px;display:grid;grid-template-columns:1fr 1fr;gap:12px}
-.custom-activity input,.custom-activity select{height:37px}
 .weather-select>span{display:flex;align-items:center;gap:5px}
 .weather-step-card{margin-left:52px;border:1px solid #e8e6df;border-radius:9px;background:#fffefa;padding:15px}
 .weather-summary{display:grid;grid-template-columns:36px 1fr auto;align-items:center;gap:12px;border:1px solid #e6e9e3;border-radius:8px;background:#f7f8f4;padding:13px;margin-bottom:12px}
@@ -680,7 +678,6 @@ a{color:inherit}
   .activity-grid{margin:0;grid-template-columns:repeat(3,1fr);gap:6px}
   .activity-option{height:62px;padding:7px}
   .activity-option strong{font-size:8px}
-  .custom-activity{margin:12px 0 0;grid-template-columns:1fr}
   .preference-block{margin-left:0;align-items:flex-start;flex-direction:column;gap:10px}
   .style-options{flex-wrap:wrap}
   .preference-toggles{margin-left:0}
@@ -841,7 +838,6 @@ a{color:inherit}
   .activity-grid{margin:0;grid-template-columns:repeat(3,1fr);gap:6px}
   .activity-option{height:62px;padding:7px}
   .activity-option strong{font-size:8px}
-  .custom-activity{margin:12px 0 0;grid-template-columns:1fr}
   .preference-block{margin-left:0;align-items:flex-start;flex-direction:column;gap:10px}
   .style-options{flex-wrap:wrap}
   .preference-toggles{margin-left:0}
@@ -988,7 +984,7 @@ body{background:#edf0f8}
   .page-title-row h1,.plan-title-row h1{font-size:28px}
   .welcome-row h1{font-size:23px}
   .section-heading h2{font-size:17px}
-  .text-link,.filter-chip,.trip-card-date,.trip-card-meta,.snapshot-foot,.wardrobe-tile span,.clothing-info span,.clothing-tags span,.photo-category,.luggage-total,.capacity-footer,.saved-toolbar,.profile-card-body>p,.profile-card-stat span,.settings-card label,.wizard-heading p,.wizard-step small,.step-intro p,.form-grid label,.form-grid label small,.luggage-select-card small,.activity-option strong,.custom-activity label,.preference-label span,.toggle-row small,.review-facts>div>span:last-child,.demo-notice,.weather-adjust small,.weather-reason,.section-caption,.outfit-card-copy>p,.outfit-feedback>span,.hybrid-note,.swap-link,.packing-name,.packing-group-heading small,.before-you-go p,.before-signoff,.plan-footer-note,.empty-state p{font-size:10px}
+  .text-link,.filter-chip,.trip-card-date,.trip-card-meta,.snapshot-foot,.wardrobe-tile span,.clothing-info span,.clothing-tags span,.photo-category,.luggage-total,.capacity-footer,.saved-toolbar,.profile-card-body>p,.profile-card-stat span,.settings-card label,.wizard-heading p,.wizard-step small,.step-intro p,.form-grid label,.form-grid label small,.luggage-select-card small,.activity-option strong,.preference-label span,.toggle-row small,.review-facts>div>span:last-child,.demo-notice,.weather-adjust small,.weather-reason,.section-caption,.outfit-card-copy>p,.outfit-feedback>span,.hybrid-note,.swap-link,.packing-name,.packing-group-heading small,.before-you-go p,.before-signoff,.plan-footer-note,.empty-state p{font-size:10px}
   .button,.settings-buttons .button,.wizard-actions .button{font-size:12px}
   .trip-card-body h3,.clothing-info h3{font-size:13px}
   .clothing-tags span,.photo-category,.occasion-badge,.hybrid-badge{font-size:9px}
@@ -1155,8 +1151,7 @@ body{
   box-shadow:inset 0 2px 2px #ffffff80,0 2px 0 #075985;
 }
 .search-field input,.form-grid input,.settings-card input,.settings-card select,
-.modal-form input,.modal-form select,.auth-form input,.custom-activity input,
-.custom-activity select,.weather-adjust select{
+.modal-form input,.modal-form select,.auth-form input,.weather-adjust select{
   color:#123653;
   background:#f0f9ff;
   border:2px solid #7dd3fc;
@@ -1165,8 +1160,7 @@ body{
 }
 .search-field:focus-within,.search-field input:focus,
 .form-grid input:focus,.settings-card input:focus,.settings-card select:focus,
-.modal-form input:focus,.modal-form select:focus,.auth-form input:focus,
-.custom-activity input:focus,.custom-activity select:focus{border-color:#0284c7}
+.modal-form input:focus,.modal-form select:focus,.auth-form input:focus{border-color:#0284c7}
 .wizard-progress-track{height:7px;border-radius:20px;background:#bae6fd;border:1px solid #38bdf8}
 .wizard-progress-track span{height:100%;border-radius:20px;background:linear-gradient(90deg,#facc15,#fb923c);box-shadow:inset 0 1px 2px #fff}
 .wizard-step span{
@@ -1385,6 +1379,25 @@ body{
 .wizard-outfit-count .preference-label span{font-size:9px}
 .wizard-outfit-count .number-stepper{gap:7px}
 .wizard-outfit-count .number-stepper button{width:27px;height:27px}
+.outfit-planning-step{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:12px;margin:0 0 18px;padding:14px;border:2px solid #38bdf8;border-radius:16px;background:linear-gradient(135deg,#f0f9ff,#e0f2fe)}
+.outfit-planning-heading{min-width:0}
+.outfit-planning-heading .eyebrow{color:#0369a1;font-size:8px;font-weight:800;letter-spacing:1px}
+.outfit-planning-heading h2{margin:4px 0;color:#123653;font-size:14px}
+.outfit-planning-heading p{margin:0;color:#52728a;font-size:10px;line-height:1.45}
+.outfit-count-picker{display:flex;align-items:center;gap:8px;padding:7px;border:1px solid #7dd3fc;border-radius:12px;background:#fff}
+.outfit-count-picker button{width:30px;height:30px;display:grid;place-items:center;border:1px solid #7dd3fc;border-radius:9px;background:#e0f2fe;color:#075985}
+.outfit-count-picker button:disabled{opacity:.45}
+.outfit-count-picker strong{min-width:20px;text-align:center;color:#123653;font-size:18px}
+.outfit-count-picker>span{color:#52728a;font-size:9px}
+.recommended-clothing-panel{grid-column:1/-1;padding:11px;border:1px solid #f4c67a;border-radius:12px;background:#fffbeb;color:#764b0b}
+.recommended-clothing-panel>strong{display:flex;align-items:center;gap:6px;color:#8a520b;font-size:11px}
+.recommended-clothing-panel>p{margin:5px 0 7px;color:#8a6a37;font-size:9px;line-height:1.4}
+.recommended-clothing-panel ul{display:grid;gap:5px;margin:0;padding:0;list-style:none}
+.recommended-clothing-panel li{display:grid;gap:2px}
+.recommended-clothing-panel li b{font-size:10px}
+.recommended-clothing-panel li span{font-size:9px;line-height:1.35}
+.packing-name{display:grid;gap:3px}
+.packing-name small{color:#9a6b27;font-size:8px;line-height:1.4}
 .wizard-outfit-list{display:grid;gap:12px}
 .wizard-outfit-card{
   padding:12px;
@@ -1508,6 +1521,8 @@ body{
   .wizard-step small{max-width:57px;text-align:center;line-height:1.15;white-space:normal;font-size:8px}
   .wizard-checklist{grid-template-columns:1fr}
   .wizard-weather .weather-summary-main small{font-size:8px}
+  .outfit-planning-step{grid-template-columns:1fr}
+  .outfit-count-picker{justify-self:start}
 }
 
 /* Keep helper text and labels readable on the compact phone layout. */
@@ -1523,8 +1538,7 @@ body{
   letter-spacing:.35px;
   line-height:1.35;
 }
-.app-shell .form-grid label,.app-shell .custom-activity label,
-.app-shell .settings-card label,.app-shell .modal-form label{
+.app-shell .form-grid label,.app-shell .settings-card label,.app-shell .modal-form label{
   font-size:12px;
 }
 .app-shell .page-title-row p,.app-shell .welcome-row p,
