@@ -1,15 +1,15 @@
-import { useEffect, useMemo, useState, type ChangeEvent, type FormEvent, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type ChangeEvent, type FormEvent, type KeyboardEvent, type ReactNode } from 'react'
 import { Link, Navigate, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom'
 import {
   ArrowDown, ArrowLeft, ArrowRight, ArrowUp, ArrowUpRight, Backpack, CalendarDays, Check,
-  CheckCircle2, ChevronRight, CircleHelp, CloudRain, CloudSun, Compass, Ellipsis,
+  CheckCircle2, ChevronLeft, ChevronRight, CircleHelp, CloudRain, CloudSun, Compass, Ellipsis,
   FileCheck2, Heart, Luggage as LuggageIcon, MapPin, Plus, Search, Shirt, Sparkles,
   Sun, ThumbsDown, ThumbsUp, Thermometer, Upload, UserRound, X,
 } from 'lucide-react'
 import { activitiesList, activityIcon, defaultChecklist, initialLuggage, initialWardrobe } from './data'
 import { recommendMissingItems, recommendOutfits, recommendPacking, usageEstimate } from './recommendations'
 import { initialLearningProfile, learnedProfileSummary, recordOutfitFeedback } from './learning'
-import { estimateTripWeather } from './weather'
+import { estimateTripWeather, searchCities, type CitySuggestion } from './weather'
 import type { Clothing, LearningProfile, Luggage, Outfit, PackingItem, Trip, WeatherEstimate } from './types'
 
 type Modal = 'clothing' | 'luggage' | null
@@ -320,7 +320,7 @@ function WardrobePage({ wardrobe, onAdd, onEdit, onDelete }: { wardrobe: Clothin
 function LuggagePage({ luggage, onAdd, onEdit, onDelete }: { luggage: Luggage[]; onAdd: () => void; onEdit: (item: Luggage) => void; onDelete: (id: string) => void }) {
   const [menu, setMenu] = useState<string | null>(null)
   return <div className="page">
-    <PageTitle eyebrow="THE RIGHT BAG FOR THE RIGHT GETAWAY" title="Your luggage" subtitle="Every trip deserves the right amount of room." action={<button className="button button-primary" onClick={onAdd}><Plus size={17} /> Add luggage</button>} />
+    <PageTitle eyebrow="THE RIGHT BAG FOR THE RIGHT GETAWAY" title="Your luggage" subtitle="Every trip deserves the right amount of room." action={<button className="button button-primary" onClick={onAdd}><Plus size={17} /> Add new luggage</button>} />
     <div className="luggage-intro"><div className="luggage-intro-icon"><LuggageIcon size={22} /></div><div><strong>Keep your bags close.</strong><p>SuitcaseAI uses your bag’s capacity to help keep your packing plan practical.</p></div><span className="luggage-total">{luggage.length} {luggage.length === 1 ? 'bag' : 'bags'}</span></div>
     <div className="luggage-grid">{luggage.map((item, index) => <article className="luggage-card" key={item.id}><div className={`luggage-image ${index % 2 ? 'tint-peach' : ''}`}><img src={item.image || imageFallback} alt={item.name} /><span className="bag-label">{item.type}</span><button className="more-button luggage-more" aria-label={`Options for ${item.name}`} onClick={() => setMenu(menu === item.id ? null : item.id)}><Ellipsis size={18} /></button>{menu === item.id && <div className="card-menu"><button onClick={() => { setMenu(null); onEdit(item) }}>Edit bag</button><button className="danger-text" onClick={() => { setMenu(null); onDelete(item.id) }}>Remove</button></div>}</div><div className="luggage-card-copy"><div><h3>{item.name}</h3><p>{item.dimensions || 'Dimensions not added'}</p></div><div className="capacity"><strong>{item.capacity}<small>L</small></strong><span>approx. capacity</span></div></div><div className="capacity-track"><span style={{ width: `${Math.min(100, item.capacity / 0.75)}%` }} /></div><div className="capacity-footer"><span>Personal item</span><span>Checked bag</span></div></article>)}
       <button className="add-luggage-card" onClick={onAdd}><span><Plus size={20} /></span><strong>Add another bag</strong><small>One for every kind of trip</small></button>
@@ -356,6 +356,68 @@ const wizardTitles = ['Trip & dates', 'Suitcase', 'Activities', 'Outfits & packi
 const initialForm = () => ({ destination: '', departure: '', returnDate: '', luggageId: '', activities: [] as string[], weather: 'Mild & mixed', outfitCount: 4, reuse: true, hybrid: true, laundry: false })
 type TripFormState = ReturnType<typeof initialForm>
 
+function dateKey(date: Date) {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+function DateRangePicker({ departure, returnDate, onChange }: { departure: string; returnDate: string; onChange: (departure: string, returnDate: string) => void }) {
+  const today = dateKey(new Date())
+  const initialDate = departure ? new Date(`${departure}T12:00:00`) : new Date()
+  const [visibleMonth, setVisibleMonth] = useState(() => new Date(initialDate.getFullYear(), initialDate.getMonth(), 1))
+  const [open, setOpen] = useState(false)
+  const firstDay = new Date(visibleMonth.getFullYear(), visibleMonth.getMonth(), 1).getDay()
+  const daysInMonth = new Date(visibleMonth.getFullYear(), visibleMonth.getMonth() + 1, 0).getDate()
+  const currentMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1)
+  const canGoBack = visibleMonth > currentMonth
+  const dates = Array.from({ length: daysInMonth }, (_, index) => {
+    const date = new Date(visibleMonth.getFullYear(), visibleMonth.getMonth(), index + 1)
+    return { date, key: dateKey(date) }
+  })
+  const formatDate = (value: string) => new Date(`${value}T12:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+  const chooseDate = (value: string) => {
+    if (!departure || returnDate || value < departure) {
+      onChange(value, '')
+      return
+    }
+    onChange(departure, value)
+    setOpen(false)
+  }
+
+  return <div className="field-full date-range-field">
+    <label htmlFor="trip-date-range">Trip dates</label>
+    <div className="date-range-picker" onBlur={(event) => {
+      if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setOpen(false)
+    }}>
+      <button id="trip-date-range" type="button" className="date-range-trigger" aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen((current) => !current)}>
+        <CalendarDays size={17} />
+        <span>{departure ? `${formatDate(departure)}${returnDate ? ` – ${formatDate(returnDate)}` : ' – Select return date'}` : 'Select departure and return dates'}</span>
+        <ChevronRight className={open ? 'date-range-chevron open' : 'date-range-chevron'} size={16} />
+      </button>
+      {open && <div className="date-range-popover" role="dialog" aria-label="Choose trip dates">
+        <div className="date-calendar-header">
+          <button type="button" aria-label="Previous month" disabled={!canGoBack} onClick={() => setVisibleMonth((month) => new Date(month.getFullYear(), month.getMonth() - 1, 1))}><ChevronLeft size={17} /></button>
+          <strong>{visibleMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</strong>
+          <button type="button" aria-label="Next month" onClick={() => setVisibleMonth((month) => new Date(month.getFullYear(), month.getMonth() + 1, 1))}><ChevronRight size={17} /></button>
+        </div>
+        <div className="date-calendar-grid" role="group" aria-label={visibleMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}>
+          {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map((day) => <span className="date-calendar-weekday" key={day}>{day}</span>)}
+          {Array.from({ length: firstDay }, (_, index) => <span className="date-calendar-empty" key={`empty-${index}`} />)}
+          {dates.map(({ date, key }) => {
+            const past = key < today
+            const selected = key === departure || key === returnDate
+            const inRange = departure && returnDate && key > departure && key < returnDate
+            return <button key={key} type="button" aria-label={date.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })} aria-pressed={selected} disabled={past} className={`date-calendar-day${selected ? ' selected' : ''}${inRange ? ' in-range' : ''}${key === today ? ' today' : ''}`} onClick={() => chooseDate(key)}>{date.getDate()}</button>
+          })}
+        </div>
+        <small className="date-range-hint">{departure && !returnDate ? 'Now choose your return date.' : 'Past dates are unavailable.'}</small>
+      </div>}
+    </div>
+  </div>
+}
+
 function TripWizard({ wardrobe, luggage, trips, learning, onSave, notify }: { wardrobe: Clothing[]; luggage: Luggage[]; trips: Trip[]; learning: LearningProfile; onSave: (trip: Trip) => void; notify: (message: string) => void }) {
   const navigate = useNavigate()
   const [searchParams] = useState(() => new URLSearchParams(window.location.search))
@@ -372,6 +434,10 @@ function TripWizard({ wardrobe, luggage, trips, learning, onSave, notify }: { wa
   const [error, setError] = useState('')
   const [weatherEstimate, setWeatherEstimate] = useState<WeatherEstimate | null>(existing?.weatherEstimate ?? null)
   const [weatherStatus, setWeatherStatus] = useState<'idle' | 'loading' | 'ready'>('idle')
+  const [citySuggestions, setCitySuggestions] = useState<CitySuggestion[]>([])
+  const [citySearchStatus, setCitySearchStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle')
+  const [cityInputFocused, setCityInputFocused] = useState(false)
+  const [activeCityIndex, setActiveCityIndex] = useState(-1)
   const [draftOutfits, setDraftOutfits] = useState<Outfit[] | null>(() => hasOutfitRecommendations ? existing?.outfits ?? null : null)
   const [draftPacking, setDraftPacking] = useState<PackingItem[] | null>(() => hasOutfitRecommendations ? existing?.packing ?? null : null)
   const [draftChecklist, setDraftChecklist] = useState<PackingItem[] | null>(() => existing?.checklist ?? null)
@@ -413,6 +479,31 @@ function TripWizard({ wardrobe, luggage, trips, learning, onSave, notify }: { wa
   const usage = usageEstimate(packing, selectedBag?.capacity ?? 38)
 
   useEffect(() => {
+    const query = form.destination.trim()
+    if (!cityInputFocused || query.length < 2) {
+      setCitySuggestions([])
+      setCitySearchStatus('idle')
+      return
+    }
+
+    let cancelled = false
+    setCitySearchStatus('loading')
+    const timeout = window.setTimeout(() => {
+      searchCities(query).then((results) => {
+        if (cancelled) return
+        setCitySuggestions(results)
+        setCitySearchStatus('ready')
+      }).catch((reason: unknown) => {
+        if (cancelled) return
+        console.error('Unable to search cities', reason)
+        setCitySuggestions([])
+        setCitySearchStatus('error')
+      })
+    }, 250)
+    return () => { cancelled = true; window.clearTimeout(timeout) }
+  }, [form.destination, cityInputFocused])
+
+  useEffect(() => {
     if (!form.destination.trim() || !form.departure || !form.returnDate || new Date(`${form.returnDate}T12:00:00`) < new Date(`${form.departure}T12:00:00`)) {
       setWeatherStatus('idle')
       return
@@ -437,6 +528,10 @@ function TripWizard({ wardrobe, luggage, trips, learning, onSave, notify }: { wa
 
   const next = () => {
     setError('')
+    if (step === 0 && form.departure && form.departure < dateKey(new Date())) {
+      setError('Trip dates cannot be in the past. Choose a future departure date.')
+      return
+    }
     if (step === 0 && (!form.destination.trim() || !form.departure || !form.returnDate || new Date(`${form.returnDate}T12:00:00`) < new Date(`${form.departure}T12:00:00`))) {
       setError('Add a destination and valid travel dates to continue.')
       return
@@ -520,13 +615,37 @@ function TripWizard({ wardrobe, luggage, trips, learning, onSave, notify }: { wa
     setCustomChecklistItem('')
   }
 
+  const selectCity = (city: CitySuggestion) => {
+    setField('destination', city.country ? `${city.name}, ${city.country}` : city.name)
+    setCitySuggestions([])
+    setCitySearchStatus('idle')
+    setCityInputFocused(false)
+    setActiveCityIndex(-1)
+  }
+
+  const handleCityKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'ArrowDown' && citySuggestions.length) {
+      event.preventDefault()
+      setActiveCityIndex((current) => (current + 1) % citySuggestions.length)
+    } else if (event.key === 'ArrowUp' && citySuggestions.length) {
+      event.preventDefault()
+      setActiveCityIndex((current) => (current <= 0 ? citySuggestions.length - 1 : current - 1))
+    } else if (event.key === 'Enter' && activeCityIndex >= 0 && citySuggestions[activeCityIndex]) {
+      event.preventDefault()
+      selectCity(citySuggestions[activeCityIndex])
+    } else if (event.key === 'Escape') {
+      setCityInputFocused(false)
+      setActiveCityIndex(-1)
+    }
+  }
+
   return <div className="page wizard-page">
     <button className="back-link" onClick={() => navigate(existing ? `/trip/${existing.id}` : '/')}><ArrowLeft size={16} /> {existing ? 'Back to trip' : 'Back to home'}</button>
     <div className="wizard-heading"><div><div className="eyebrow">{existing ? 'MAKE IT YOURS' : 'YOUR TRIP, STEP BY STEP'}</div><h1>{existing ? 'Edit your trip' : 'Let’s plan your trip.'}</h1><p>We’ll help with the weather, outfits, and essentials as you go.</p></div><span className="wizard-count">0{step + 1}<i>/</i>0{wizardTitles.length}</span></div>
     <div className="wizard-progress"><div className="wizard-steps">{wizardTitles.map((title, index) => <button key={title} className={`wizard-step ${step === index ? 'current' : ''} ${step > index ? 'complete' : ''}`} onClick={() => index < step && setStep(index)}><span>{step > index ? <Check size={14} /> : `0${index + 1}`}</span><small>{title}</small></button>)}</div><div className="wizard-progress-track"><span style={{ width: `${((step + 1) / wizardTitles.length) * 100}%` }} /></div></div>
     <section className="wizard-card">
       {step === 3 && <OutfitPlanningStep count={form.outfitCount} onChange={(count) => setField('outfitCount', count)} recommendations={recommendedClothing} />}
-      {step === 0 && <div className="wizard-step-content"><StepIntro icon={<MapPin size={20} />} eyebrow="STEP 1 · TRIP & DATES" title="Where are we going?" description="Choose your destination and dates." /><div className="form-grid"><label className="field-full">Destination<input value={form.destination} onChange={(event) => setField('destination', event.target.value)} placeholder="e.g. Copenhagen, Denmark" autoFocus /><small><MapPin size={12} /> Weather updates automatically</small></label><label>Departure<input type="date" lang="en-GB" value={form.departure} onChange={(event) => setField('departure', event.target.value)} min={new Date().toISOString().slice(0, 10)} /></label><label>Return<input type="date" lang="en-GB" value={form.returnDate} onChange={(event) => setField('returnDate', event.target.value)} min={form.departure || new Date().toISOString().slice(0, 10)} /></label></div>{form.departure && form.returnDate && <div className="duration-pill"><CalendarDays size={15} /> <strong>{days} days</strong> away</div>}<div className="wizard-weather"><WeatherCard estimate={weatherEstimate} loading={weatherStatus === 'loading'} /></div></div>}
+      {step === 0 && <div className="wizard-step-content"><StepIntro icon={<MapPin size={20} />} eyebrow="STEP 1 · TRIP & DATES" title="Where are we going?" description="Choose your destination and dates." /><div className="form-grid"><div className="field-full city-field"><label htmlFor="trip-destination">Destination</label><div className="city-autocomplete" onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setCityInputFocused(false) }}><input id="trip-destination" role="combobox" aria-autocomplete="list" aria-expanded={cityInputFocused && form.destination.trim().length >= 2} aria-controls="city-suggestions" aria-activedescendant={activeCityIndex >= 0 ? `city-option-${activeCityIndex}` : undefined} value={form.destination} onFocus={() => setCityInputFocused(true)} onChange={(event) => { setField('destination', event.target.value); setActiveCityIndex(-1) }} onKeyDown={handleCityKeyDown} placeholder="e.g. Copenhagen, Denmark" autoFocus />{cityInputFocused && form.destination.trim().length >= 2 && <div className="city-suggestions" id="city-suggestions" role="listbox" aria-label="City suggestions">{citySearchStatus === 'loading' && <div className="city-suggestion-message">Finding cities…</div>}{citySearchStatus === 'error' && <div className="city-suggestion-message">City suggestions are unavailable right now.</div>}{citySearchStatus === 'ready' && citySuggestions.length === 0 && <div className="city-suggestion-message">No matching cities found.</div>}{citySuggestions.map((city, index) => <button id={`city-option-${index}`} key={`${city.name}-${city.admin1}-${city.country}-${city.latitude}-${city.longitude}`} type="button" role="option" aria-selected={activeCityIndex === index} className={`city-suggestion ${activeCityIndex === index ? 'active' : ''}`} onMouseEnter={() => setActiveCityIndex(index)} onClick={() => selectCity(city)}><MapPin size={15} /><span><strong>{city.name}</strong><small>{[city.admin1, city.country].filter(Boolean).join(', ')}</small></span></button>)}</div>}</div><small><MapPin size={12} /> Weather updates automatically</small></div><DateRangePicker departure={form.departure} returnDate={form.returnDate} onChange={(departure, returnDate) => { setField('departure', departure); setField('returnDate', returnDate) }} /></div>{form.departure && form.returnDate && <div className="duration-pill"><CalendarDays size={15} /> <strong>{days} days</strong> away</div>}<div className="wizard-weather"><WeatherCard estimate={weatherEstimate} loading={weatherStatus === 'loading'} /></div></div>}
       {step === 1 && <div className="wizard-step-content"><StepIntro icon={<LuggageIcon size={20} />} eyebrow="STEP 2 · SUITCASE" title="Choose your suitcase." description="Pick the bag you’ll take." />{luggage.length ? <div className="luggage-select-grid">{luggage.map((bag) => <button key={bag.id} className={`luggage-select-card ${form.luggageId === bag.id ? 'chosen' : ''}`} onClick={() => setField('luggageId', bag.id)}><span className="selection-check">{form.luggageId === bag.id && <Check size={13} />}</span><img src={bag.image || imageFallback} alt="" /><div><span className="eyebrow">{bag.type}</span><strong>{bag.name}</strong><small>{bag.capacity}L · {bag.dimensions}</small></div><ArrowUpRight size={16} /></button>)}</div> : <EmptyState title="No bags yet" description="Add a suitcase to continue." action={<button className="button button-primary" onClick={() => navigate('/luggage')}>Add a bag <ArrowRight size={15} /></button>} />}</div>}
       {step === 2 && <div className="wizard-step-content"><StepIntro icon={<Sun size={20} />} eyebrow="STEP 3 · ACTIVITIES" title="What are you doing?" description="Choose all that apply." /><div className="activity-grid">{activitiesList.map((activity) => <button key={activity} className={`activity-option ${form.activities.includes(activity) ? 'selected' : ''}`} onClick={() => toggleActivity(activity)}><span>{activityIcon[activity]}</span><strong>{activity}</strong>{form.activities.includes(activity) && <Check size={14} />}</button>)}</div></div>}
       {step === 3 && <div className="wizard-step-content"><StepIntro icon={<Sparkles size={20} />} eyebrow="STEP 4 · PACKING LIST" title="What would you like to pack?" description="We’ve picked clothes for your trip. Add or remove any item." /><div className="wizard-packing-summary"><div className="wizard-packing-summary-top"><span><LuggageIcon size={17} /> Bag space</span><strong>{usage}% <small>of {selectedBag?.capacity ?? 38}L</small></strong></div><div className="wizard-capacity-track"><span style={{ width: `${usage}%` }} /></div><small>Space is an estimate.</small></div><div className="wizard-packing-section"><h3>Your clothes <span>{packing.filter((item) => item.wardrobeId).length} items</span></h3><div className="wizard-packing-list">{wardrobe.map((item) => { const selected = packing.some((entry) => entry.wardrobeId === item.id); return <label className={`wizard-packing-row ${selected ? 'included' : ''}`} key={item.id}><input type="checkbox" checked={selected} onChange={() => toggleWardrobePacking(item)} /><img src={item.image || imageFallback} alt="" /><span><strong>{item.name}</strong><small>{item.category}{selected && outfits.some((outfit) => outfit.items.some((piece) => piece.id === item.id)) ? ' · outfit pick' : ''}</small></span><Check size={16} /></label> })}</div></div><div className="wizard-packing-section"><h3>Everyday essentials <span>Change quantity</span></h3><div className="wizard-essentials">{packing.filter((item) => item.category === 'Clothing basics').map((item) => <div className="wizard-essential-row" key={item.id}><span><strong>{item.name}</strong><small>{form.laundry ? 'Laundry planned' : `${days} days`}</small></span><div className="number-stepper"><button aria-label={`Fewer ${item.name}`} onClick={() => updatePackingItem(item.id, (current) => ({ ...current, quantity: Math.max(0, current.quantity - 1) }))}><ArrowDown size={13} /></button><strong>{item.quantity}</strong><button aria-label={`More ${item.name}`} onClick={() => updatePackingItem(item.id, (current) => ({ ...current, quantity: current.quantity + 1 }))}><ArrowUp size={13} /></button></div></div>)}</div></div><div className="preference-toggles wizard-compact-toggles"><ToggleRow title="Rewear clothes" subtitle="Mix and match to pack less." checked={form.reuse} onChange={(checked) => setField('reuse', checked)} /><ToggleRow title="Do laundry on the trip" subtitle="Pack fewer basics." checked={form.laundry} onChange={(checked) => setField('laundry', checked)} /></div></div>}
@@ -646,7 +765,7 @@ function TripPlan({ trips, wardrobe, luggage, learning, onLearn, onUpdate, onNav
     {trip.weatherEstimate && <WeatherSummary estimate={trip.weatherEstimate} category={trip.weather} compact />}
     <div className="plan-callout"><span className="callout-spark"><Sparkles size={16} /></span><span><strong>A little thought goes a long way.</strong> We’ve matched your wardrobe to the {trip.weather.toLowerCase()} outlook, {trip.days} days away, {trip.activities.length ? trip.activities.slice(0, 2).join(' & ').toLowerCase() : 'and your plans'}.</span><span className="demo-tag">PACKING PLAN</span></div>
     <div className="plan-tabs">{([{ id: 'outfits', label: 'Outfit ideas', count: outfits.length }, { id: 'packing', label: 'What to pack', count: totalItems }, { id: 'essentials', label: 'Don’t forget', count: trip.checklist.length }] as const).map(({ id, label, count }) => <button key={id} className={tab === id ? 'selected' : ''} onClick={() => setTab(id)}>{label}<span>{count}</span></button>)}</div>
-    {tab === 'outfits' && <section className="plan-section"><div className="section-heading"><div><div className="eyebrow">MADE FROM YOUR WARDROBE</div><h2>Looks to take you places</h2></div><span className="section-caption">{outfits.length} outfit ideas</span></div><div className="learning-banner"><span><Sparkles size={17} /></span><div><strong>Your packing coach is learning</strong><small>Tap a thumbs-up or down. Your next trip gets more personal.</small></div><b>{learning.feedbackCount} ratings</b></div><div className="outfit-grid">{outfits.map((outfit, index) => <article className="outfit-card" key={outfit.id}><div className="outfit-card-top"><span className="day-label">LOOK {String(index + 1).padStart(2, '0')}</span><button className="more-button" aria-label="Replace outfit" title="Replace outfit" onClick={() => replaceOutfit(index)}><ArrowUpRight size={17} /></button></div><div className="outfit-photos">{outfit.items.slice(0, 3).map((item) => <img src={item.image || imageFallback} alt={item.name} key={item.id} />)}</div><div className="outfit-card-copy"><div className="outfit-badges"><span className="occasion-badge">{activityIcon[outfit.occasion] ?? '✦'} {outfit.occasion}</span>{outfit.hybrid && <span className="hybrid-badge"><Sparkles size={11} /> HYBRID</span>}</div><h3>{outfit.name}</h3>{outfit.items.map((item) => <p key={item.id}><span>{item.name}</span><small>{item.color}</small></p>)}{outfit.note && <div className="hybrid-note">{outfit.note}</div>}{outfit.reason && <div className="ai-reason"><Sparkles size={12} />{outfit.reason}</div>}<div className="outfit-feedback"><span>{ratedOutfits[outfit.id] === undefined ? 'Would you wear this?' : ratedOutfits[outfit.id] ? 'We’ll remember that' : 'We’ll adjust next time'}</span><button className={ratedOutfits[outfit.id] === true ? 'selected' : ''} disabled={ratedOutfits[outfit.id] !== undefined} aria-label="I like this outfit" onClick={() => rateOutfit(outfit, true)}><ThumbsUp size={15} /></button><button className={ratedOutfits[outfit.id] === false ? 'selected' : ''} disabled={ratedOutfits[outfit.id] !== undefined} aria-label="I don’t like this outfit" onClick={() => rateOutfit(outfit, false)}><ThumbsDown size={15} /></button></div><button className="swap-link" onClick={() => replaceOutfit(index)}><ArrowRight size={13} /> Try another combination</button></div></article>)}</div><div className="outfit-tip"><Sparkles size={15} /><span><strong>The clever bit:</strong> feedback trains your on-device preference model for future outfit ideas.</span></div></section>}
+    {tab === 'outfits' && <section className="plan-section"><div className="section-heading"><div><div className="eyebrow">MADE FROM YOUR WARDROBE</div><h2>Looks to take you places</h2></div><span className="section-caption">{outfits.length} outfit ideas</span></div><div className="learning-banner"><span><Sparkles size={17} /></span><div><strong>Your packing coach is learning</strong><small>Tap a thumbs-up or down. Your next trip gets more personal.</small></div><b>{learning.feedbackCount} ratings</b></div><div className="outfit-grid">{outfits.map((outfit, index) => <article className="outfit-card" key={outfit.id}><div className="outfit-card-top"><span className="day-label">LOOK {String(index + 1).padStart(2, '0')}</span><button className="more-button" aria-label="Replace outfit" title="Replace outfit" onClick={() => replaceOutfit(index)}><ArrowUpRight size={17} /></button></div><div className="outfit-photos">{outfit.items.slice(0, 3).map((item) => <img src={item.image || imageFallback} alt={item.name} key={item.id} />)}</div><div className="outfit-card-copy"><span className="occasion-badge">{activityIcon[outfit.occasion] ?? '✦'} {outfit.occasion}</span><h3>{outfit.name}</h3>{outfit.items.map((item) => <p key={item.id}><span>{item.name}</span></p>)}<div className="outfit-feedback"><button className={ratedOutfits[outfit.id] === true ? 'selected' : ''} disabled={ratedOutfits[outfit.id] !== undefined} aria-label="I like this outfit" title="I like this outfit" onClick={() => rateOutfit(outfit, true)}><ThumbsUp size={15} /></button><button className={ratedOutfits[outfit.id] === false ? 'selected' : ''} disabled={ratedOutfits[outfit.id] !== undefined} aria-label="I don’t like this outfit" title="I don’t like this outfit" onClick={() => rateOutfit(outfit, false)}><ThumbsDown size={15} /></button><button className="swap-link" onClick={() => replaceOutfit(index)}><ArrowRight size={13} /> Swap outfit</button></div></div></article>)}</div><div className="outfit-tip"><Sparkles size={15} /><span><strong>The clever bit:</strong> feedback trains your on-device preference model for future outfit ideas.</span></div></section>}
     {tab === 'packing' && <section className="plan-section packing-section"><div className="section-heading"><div><div className="eyebrow">YOUR EDITED, CHECKABLE LIST</div><h2>Everything worth bringing</h2></div><span className="section-caption">{totalItems} total pieces</span></div><div className="packing-layout"><div className="packing-groups">{categorized.length ? categorized.map(([category, items]) => <div className="packing-group" key={category}><div className="packing-group-heading"><span>{category}</span><small>{items.length} {items.length === 1 ? 'item' : 'items'}</small></div>{items.map((item) => <PackingRow key={item.id} item={item} onToggle={() => togglePacking(item.id)} onQuantity={(amount) => changeQuantity(item.id, item.quantity + amount)} onRemove={() => removePacking(item.id)} />)}</div>) : <div className="empty-inline">Your packing list is clear. Add pieces from the wardrobe to get started.</div>}</div><aside className="underwear-card"><span className="underwear-icon"><Heart size={18} /></span><div className="eyebrow">THE EVERYDAY EXTRAS</div><h3>Small things,<br />big difference.</h3><p>Basics are estimated for {trip.days} days{trip.preferences.laundry ? ', with laundry in mind' : ''}. Adjust anything to suit your trip.</p><div className="basics-list">{trip.packing.filter((item) => item.category === 'Clothing basics').map((item) => <PackingRow compact key={item.id} item={item} onToggle={() => togglePacking(item.id)} onQuantity={(amount) => changeQuantity(item.id, item.quantity + amount)} />)}</div><small className="estimate-note"><CloudSun size={13} /> Helpful estimates, not hard rules</small></aside></div></section>}
     {tab === 'essentials' && <section className="plan-section essentials-section"><div className="section-heading"><div><div className="eyebrow">THE THINGS THAT MATTER MOST</div><h2>Don’t leave without these</h2></div><span className="section-caption">{trip.checklist.filter((item) => item.packed).length} of {trip.checklist.length} ready</span></div><div className="essentials-layout"><div className="essentials-card"><div className="essentials-heading"><span className="essentials-heading-icon"><FileCheck2 size={18} /></span><div><strong>The important things</strong><small>Travel essentials, all in one place</small></div></div>{trip.checklist.map((item) => <PackingRow key={item.id} item={item} onToggle={() => toggleChecklist(item.id)} />)}<form className="add-checklist-form" onSubmit={addChecklist}><Plus size={16} /><input value={customItem} onChange={(event) => setCustomItem(event.target.value)} placeholder="Add something to remember..." /><button type="submit" disabled={!customItem.trim()}>Add</button></form></div><div className="before-you-go"><div className="before-art"><img src="https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=800&q=85" alt="" /><span><Sun size={18} /></span></div><div className="eyebrow">A GENTLE REMINDER</div><h3>Leave a little room<br />for the good stuff.</h3><p>Your packing plan is a guide, not a rulebook. Make it yours, then go make some memories.</p><span className="before-signoff">With care, SuitcaseAI <Heart size={13} /></span></div></div></section>}
     <div className="plan-footer-note"><span><Sparkles size={14} /></span> Recommendations are demo suggestions based on your wardrobe and trip details.</div>

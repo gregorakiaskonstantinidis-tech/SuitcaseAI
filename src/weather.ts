@@ -2,9 +2,21 @@ import type { WeatherEstimate } from './types'
 
 type GeocodingResult = {
   name: string
+  admin1?: string
   country?: string
   latitude: number
   longitude: number
+}
+
+export type CitySuggestion = Pick<GeocodingResult, 'name' | 'admin1' | 'country' | 'latitude' | 'longitude'>
+
+export async function searchCities(query: string): Promise<CitySuggestion[]> {
+  const geocodingUrl = new URL('https://geocoding-api.open-meteo.com/v1/search')
+  geocodingUrl.search = new URLSearchParams({ name: query.trim(), count: '6', language: 'en', format: 'json' }).toString()
+  const response = await fetch(geocodingUrl)
+  if (!response.ok) throw new Error(`Location search returned ${response.status}`)
+  const geocoding = await response.json() as { results?: GeocodingResult[] }
+  return geocoding.results ?? []
 }
 
 type ForecastResponse = {

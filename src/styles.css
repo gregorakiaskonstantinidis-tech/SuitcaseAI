@@ -588,13 +588,13 @@ a{color:inherit}
   .page-title-row{align-items:flex-start;margin:5px 0 22px}
   .page-title-row h1,.plan-title-row h1{font-size:29px}
   .page-title-row p{font-size:11px;max-width:260px;line-height:1.5}
-  .page-title-row>.button{font-size:0;padding:10px;width:37px;height:37px;gap:0;flex:none;margin-top:16px}
-  .page-title-row>.button svg{width:18px}
+  .page-title-row>.button{font-size:10px;padding:8px 10px;width:auto;height:auto;gap:6px;flex:none;margin-top:16px}
+  .page-title-row>.button svg{width:16px}
   .welcome-row{align-items:flex-start;margin-bottom:18px}
   .welcome-row h1{font-size:24px}
   .welcome-row p{font-size:10px}
-  .welcome-row>.button{font-size:0;width:38px;height:38px;padding:0;flex:none;margin-top:12px}
-  .welcome-row>.button svg{width:19px}
+  .welcome-row>.button{font-size:10px;width:auto;height:auto;padding:9px 10px;gap:6px;flex:none;margin-top:12px}
+  .welcome-row>.button svg{width:16px}
   .hero-card{height:270px;margin-bottom:27px;border-radius:9px}
   .hero-card>img{object-position:57% center}
   .hero-copy{left:20px;top:22px}
@@ -746,13 +746,13 @@ a{color:inherit}
   .page-title-row{align-items:flex-start;margin:5px 0 22px}
   .page-title-row h1,.plan-title-row h1{font-size:29px}
   .page-title-row p{font-size:11px;max-width:260px;line-height:1.5}
-  .page-title-row>.button{font-size:0;padding:10px;width:37px;height:37px;gap:0;flex:none;margin-top:16px}
-  .page-title-row>.button svg{width:18px}
+  .page-title-row>.button{font-size:10px;padding:8px 10px;width:auto;height:auto;gap:6px;flex:none;margin-top:16px}
+  .page-title-row>.button svg{width:16px}
   .welcome-row{align-items:flex-start;margin-bottom:18px}
   .welcome-row h1{font-size:24px}
   .welcome-row p{font-size:10px}
-  .welcome-row>.button{font-size:0;width:38px;height:38px;padding:0;flex:none;margin-top:12px}
-  .welcome-row>.button svg{width:19px}
+  .welcome-row>.button{font-size:10px;width:auto;height:auto;padding:9px 10px;gap:6px;flex:none;margin-top:12px}
+  .welcome-row>.button svg{width:16px}
   .hero-card{height:270px;margin-bottom:27px;border-radius:9px}
   .hero-card>img{object-position:57% center}
   .hero-copy{left:20px;top:22px}
@@ -966,6 +966,7 @@ body{background:#edf0f8}
 .outfit-feedback>span{flex:1;color:#77808d;font-size:8px}
 .outfit-feedback button{width:27px;height:27px;display:grid;place-items:center;border:1px solid #e6e8ed;border-radius:8px;background:#fff;color:#75809a;padding:0}
 .outfit-feedback button:hover{background:#eef0ff;color:#465fd2}
+.outfit-feedback .swap-link{width:auto;height:auto;display:flex;align-items:center;gap:4px;margin-left:auto;border:0;background:transparent;color:#678493;font-size:9px;padding:4px 0}
 .auto-match-note{font-size:9px;line-height:1.45;color:#6260ae}
 .auto-match-note svg{flex:none}
 .auto-match-note strong{color:#484a99}
@@ -1569,3 +1570,61 @@ body{
   .app-shell .wizard-outfit-item{grid-template-columns:38px minmax(0,1fr) minmax(90px,42%)}
   .app-shell .wizard-add-outfit-item{grid-template-columns:17px minmax(0,1fr) minmax(90px,42%)}
 }
+.city-field{display:grid;gap:7px;position:relative;font-size:10px;color:#586771;font-weight:600}
+.city-field>small{display:flex;align-items:center;gap:4px;color:#9aa1a0;font-size:9px;font-weight:400}
+.city-autocomplete{position:relative}
+.city-autocomplete>input{display:block}
+.city-suggestions{
+  position:absolute;z-index:20;top:calc(100% + 5px);left:0;right:0;
+  max-height:250px;overflow-y:auto;padding:5px;
+  border:1px solid #cfe4ee;border-radius:12px;background:#fff;
+  box-shadow:0 12px 30px #12365320;
+}
+.city-suggestion{
+  width:100%;display:flex;align-items:center;gap:10px;padding:10px;
+  border:0;border-radius:8px;background:transparent;color:#123653;
+  text-align:left;cursor:pointer;
+}
+.city-suggestion>svg{flex:none;color:#0284c7}
+.city-suggestion>span{display:grid;gap:3px;min-width:0}
+.city-suggestion strong{font-size:12px;font-weight:600}
+.city-suggestion small{overflow:hidden;color:#788b98;text-overflow:ellipsis;white-space:nowrap;font-size:10px}
+.city-suggestion:hover,.city-suggestion.active{background:#eaf7fd}
+.city-suggestion-message{padding:12px;color:#70818a;font-size:11px;font-weight:400}
+.date-range-field{display:grid;gap:7px;position:relative;font-size:10px;color:#586771;font-weight:600}
+.date-range-picker{position:relative}
+.date-range-trigger{
+  width:100%;height:42px;display:flex;align-items:center;gap:10px;padding:0 12px;
+  border:2px solid #7dd3fc;border-radius:14px;background:#f0f9ff;color:#123653;
+  box-shadow:inset 0 2px 4px #0759851c;text-align:left;cursor:pointer;
+}
+.date-range-trigger>svg:first-child{flex:none;color:#0284c7}
+.date-range-trigger>span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;font-weight:400}
+.date-range-trigger:focus-visible{outline:2px solid #0284c7;outline-offset:3px}
+.date-range-chevron{transition:transform .15s}
+.date-range-chevron.open{transform:rotate(90deg)}
+.date-range-popover{
+  position:absolute;z-index:25;top:calc(100% + 6px);left:0;width:min(100%,340px);
+  padding:14px;border:1px solid #cfe4ee;border-radius:12px;background:#fff;
+  box-shadow:0 12px 30px #12365320;
+}
+.date-calendar-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.date-calendar-header strong{font-size:13px;color:#123653}
+.date-calendar-header button{
+  width:30px;height:30px;display:grid;place-items:center;border:0;border-radius:7px;
+  background:transparent;color:#45677a;cursor:pointer;
+}
+.date-calendar-header button:hover:not(:disabled){background:#eaf7fd}
+.date-calendar-header button:disabled{color:#c3ced4;cursor:not-allowed}
+.date-calendar-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:3px}
+.date-calendar-weekday{display:grid;place-items:center;height:28px;color:#8798a1;font-size:10px}
+.date-calendar-empty{height:36px}
+.date-calendar-day{
+  height:36px;border:0;border-radius:8px;background:transparent;color:#123653;
+  font-size:12px;cursor:pointer;
+}
+.date-calendar-day:hover:not(:disabled),.date-calendar-day.in-range{background:#eaf7fd}
+.date-calendar-day.selected{background:#0284c7;color:#fff;font-weight:700}
+.date-calendar-day.today:not(.selected){box-shadow:inset 0 0 0 1px #0284c7}
+.date-calendar-day:disabled{color:#c9d1d5;text-decoration:line-through;cursor:not-allowed}
+.date-range-hint{display:block;margin-top:10px;color:#788b98;font-size:10px;font-weight:400}
